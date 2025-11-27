@@ -14,6 +14,11 @@ LOCAL_FR_MODEL_PATH="/home/ec2-user/fr_model.bin"
 LOCAL_EN_MODEL_PATH="/home/ec2-user/en_model.bin"
 LOCAL_LANG_MODEL_PATH="/home/ec2-user/lang_model.bin"
 
+# Intermediate paths
+input_path = "/home/ec2-user/input.json"
+fr_embeddings_path = "/home/ec2-user/fr_embeddings.json"
+en_embeddings_path = "/home/ec2-user/en_embeddings.json"
+
 s3 = boto3.client("s3", region_name = REGION)
 
 # Download model from S3
@@ -69,7 +74,7 @@ def get_embedding(data: TextInput):
     # The second is a list for each job field containing the list of tokens of this job's field
     print("Calling worker for language identification")
     try:
-        group_input=call_worker(model_lang_path, input_path)
+        group_input=call_worker(LOCAL_LANG_MODEL_PATH, input_path)
     except RuntimeError as e:
         raise HTTPException(status_code=500, detail=f"worker failed on language identification: {e}")
     print("Retrieving worker output")
@@ -89,7 +94,7 @@ def get_embedding(data: TextInput):
     # The inference is applied running a subprocess on the second list
     print("Calling worker for french model inference")
     try:
-        FR_output = call_worker(model_fr_path,fr_embeddings_path)["embeddings"]
+        FR_output = call_worker(LOCAL_FR_MODEL_PATH,fr_embeddings_path)["embeddings"]
     except RuntimeError as e:
         raise HTTPException(status_code=500, detail=f"worker failed on french model inference: {e}")
     print("French model inference retrieved")
@@ -97,7 +102,7 @@ def get_embedding(data: TextInput):
 
     print("Calling worker for english model inference")
     try:
-        EN_output = call_worker(model_en_path,en_embeddings_path)["embeddings"]
+        EN_output = call_worker(LOCAL_EN_MODEL_PATH,en_embeddings_path)["embeddings"]
     except RuntimeError as e:
         raise HTTPException(status_code=500, detail=f"worker failed on english model inference: {e}")
     print("English model inference retrieved")
