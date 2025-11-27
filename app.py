@@ -1,7 +1,7 @@
 #app.py
-import boto3, subprocess, json
+import boto3, subprocess, json, os, time, psutil
 from typing import List
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
 # --- Variables ---
@@ -30,23 +30,38 @@ app = FastAPI()
 class TextInput(BaseModel):
     input: List[List[str]]
 
-def call_worker(model_path, payload):
+def call_worker(model_path, input_path):
+    print(f"Input path from call_worker: {input_path}")
     proc = subprocess.run(
-        ["python3", "worker.py", model_path],
-        input=json.dumps(payload),
+        ["python3", "worker.py", model_path, input_path],
         text=True,
         capture_output=True,
         check=False,
-        timeout=120
+        timeout=100
     )
     if proc.returncode != 0:
         raise RuntimeError(f"Worker failed: {proc.stderr}")
     return json.loads(proc.stdout)
 
+def print_memory(label):
+    process = psutil.Process(os.getpid())
+    mem_mb = process.memory_info().rss / (1024*1024)
+    print(f"[RAM] {label}: {mem_mb:.2f} MB")
+
 # Application endpoint
 @app.post("/embed")
 def get_embedding(data: TextInput):
+
+    print_memory("after calling enpoint, before loading input")
     input = data.input
+    print_memory("after loading input")
+
+    print("Writing the input tokens to disk")
+    with open(input_path,"w") as f:
+        json.dump(input, f)
+    print("File size:", os.path.getsize(input_path))
+    print_memory("after writing input to disk")
+
     # Run the language sorting worker leveraging the fasttext language detection model
     # Returns a dictionnary having one key for each language FR & EN 
     # For each key, we have two lists
@@ -54,43 +69,48 @@ def get_embedding(data: TextInput):
     # The second is a list for each job field containing the list of tokens of this job's field
     print("Calling worker for language identification")
     try:
-        group_input=call_worker(LOCAL_LANG_MODEL_PATH, input)
+        group_input=call_worker(model_lang_path, input_path)
     except RuntimeError as e:
         raise HTTPException(status_code=500, detail=f"worker failed on language identification: {e}")
     print("Retrieving worker output")
+    print_memory("after getting grouped input from language identification worker")
+
+    print("Writing french inference model input to disk")
+    with open(fr_embeddings_path,"w") as f:
+        json.dump(group_input["FR"][1],f)
+
+    print("Writing english inference model input to disk")
+    with open(en_embeddings_path,"w") as f:
+        json.dump(group_input["EN"][1],f)
+
+    print_memory("after writing the grouped input to disk")
 
     # With the output grouped by language key we can run the inference in batches
     # The inference is applied running a subprocess on the second list
     print("Calling worker for french model inference")
-    FR_input = group_input["FR"][1]
     try:
-        FR_output = call_worker(LOCAL_FR_MODEL_PATH,FR_input)["embeddings"]
+        FR_output = call_worker(model_fr_path,fr_embeddings_path)["embeddings"]
     except RuntimeError as e:
         raise HTTPException(status_code=500, detail=f"worker failed on french model inference: {e}")
     print("French model inference retrieved")
+    print_memory("after getting the french model output")
 
     print("Calling worker for english model inference")
-    EN_input = group_input["EN"][1]
     try:
-        EN_output = call_worker(LOCAL_EN_MODEL_PATH,EN_input)["embeddings"]
+        EN_output = call_worker(model_en_path,en_embeddings_path)["embeddings"]
     except RuntimeError as e:
         raise HTTPException(status_code=500, detail=f"worker failed on english model inference: {e}")
     print("English model inference retrieved")
+    print_memory("after getting the english model output")
 
-    # Now that we got the embeddings for the french and english key
-    # We can reorder the embeddings to match the original order of job's fields input
+    # Create a output variable
+    group_output=group_input.copy()
+    group_output["FR"][1]=FR_output
+    group_output["EN"][1]=EN_output
+    print_memory("after merging for final output")
+
+    return (group_output)
     
-    # We join the french and english indexes
-    order=group_input["FR"][0]+group_input["EN"][0]
-    # Make sure that the index list is complete
-    assert(sorted(order) == list(range(len(input))))
-    # We join the outputs in the same order
-    output=FR_output+EN_output
-    # Get the embeddings in their original order
-    ordered_output=[output[i] for i in order]
-
-    return (ordered_output)
-
 @app.get("/health")
 def health():
     return {"status": "ok"}
