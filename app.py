@@ -32,17 +32,20 @@ print("Download completed")
 app = FastAPI()
 
 # Define input schema
-class TextInput(BaseModel):
+class TokenInput(BaseModel):
     input: List[List[str]]
 
-def call_worker(model_path, input_path):
-    print(f"Input path from call_worker: {input_path}")
+class SentenceInput(BaseModel):
+    input: List[str]
+
+def call_worker(model_path, payload, worker):
     proc = subprocess.run(
-        ["python3", "worker.py", model_path, input_path],
+        ["python3", worker, model_path],
+        input=json.dumps(payload),
         text=True,
         capture_output=True,
         check=False,
-        timeout=100
+        timeout=120
     )
     if proc.returncode != 0:
         raise RuntimeError(f"Worker failed: {proc.stderr}")
@@ -53,48 +56,33 @@ def print_memory(label):
     mem_mb = process.memory_info().rss / (1024*1024)
     print(f"[RAM] {label}: {mem_mb:.2f} MB")
 
-# Application endpoint
-@app.post("/embed")
-def get_embedding(data: TextInput):
+def core_get_embeddings(model_type: str, input)
+    # model_type ∈ {"token", "sentence"}
 
-    print_memory("after calling enpoint, before loading input")
-    input = data.input
-    print_memory("after loading input")
-
-    print("Writing the input tokens to disk")
-    with open(input_path,"w") as f:
-        json.dump(input, f)
-    print("File size:", os.path.getsize(input_path))
-    print_memory("after writing input to disk")
+    worker_path= f"{model_type}_worker.py"
+    if model_type not in {"token", "sentence"}:
+        raise ValueError("Invalid model_type. Must be 'token' or 'sentence'.")
+    
+    print_memory("start")
 
     # Run the language sorting worker leveraging the fasttext language detection model
     # Returns a dictionnary having one key for each language FR & EN 
     # For each key, we have two lists
     # The first is the index of that language job field in the input list
-    # The second is a list for each job field containing the list of tokens of this job's field
+    # The second is a list for each job field containing either the list of tokens of this job's field or the full sentence
     print("Calling worker for language identification")
     try:
-        group_input=call_worker(LOCAL_LANG_MODEL_PATH, input_path)
+        group_input=call_worker(model_path=LOCAL_LANG_MODEL_PATH, payload=input, worker=worker_path)
     except RuntimeError as e:
         raise HTTPException(status_code=500, detail=f"worker failed on language identification: {e}")
     print("Retrieving worker output")
-    print_memory("after getting grouped input from language identification worker")
-
-    print("Writing french inference model input to disk")
-    with open(fr_embeddings_path,"w") as f:
-        json.dump(group_input["FR"][1],f)
-
-    print("Writing english inference model input to disk")
-    with open(en_embeddings_path,"w") as f:
-        json.dump(group_input["EN"][1],f)
-
-    print_memory("after writing the grouped input to disk")
+    print_memory("after getting grouped input from language identification worker")    
 
     # With the output grouped by language key we can run the inference in batches
     # The inference is applied running a subprocess on the second list
     print("Calling worker for french model inference")
     try:
-        FR_output = call_worker(LOCAL_FR_MODEL_PATH,fr_embeddings_path)["embeddings"]
+        FR_output = call_worker(model_path=LOCAL_FR_MODEL_PATH, payload=group_input["FR"][1], worker=worker_path)["embeddings"]
     except RuntimeError as e:
         raise HTTPException(status_code=500, detail=f"worker failed on french model inference: {e}")
     print("French model inference retrieved")
@@ -102,7 +90,7 @@ def get_embedding(data: TextInput):
 
     print("Calling worker for english model inference")
     try:
-        EN_output = call_worker(LOCAL_EN_MODEL_PATH,en_embeddings_path)["embeddings"]
+        EN_output = call_worker(model_path=LOCAL_EN_MODEL_PATH, payload=group_input["EN"][1], worker=worker_path)["embeddings"]
     except RuntimeError as e:
         raise HTTPException(status_code=500, detail=f"worker failed on english model inference: {e}")
     print("English model inference retrieved")
@@ -115,7 +103,21 @@ def get_embedding(data: TextInput):
     print_memory("after merging for final output")
 
     return (group_output)
-    
+
+# Application with sentence input
+@app.post("/sentence")
+def get_embedding(data: SentenceInput):
+    input = data.input
+    group_output=core_get_embeddings(model_type="sentence", input=input)
+    return (group_output)
+
+# Application with token input
+@app.post("/token")
+def get_embedding(data: TokenInput):
+    input = data.input
+    group_output=core_get_embeddings(model_type="token", input=input)
+    return (group_output)
+
 @app.get("/health")
 def health():
     return {"status": "ok"}

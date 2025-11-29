@@ -32,17 +32,17 @@ print("Download completed")
 app = FastAPI()
 
 # Define input schema
-class TokenInput(BaseModel):
+class TextInput(BaseModel):
     input: List[List[str]]
 
-def call_worker(model_path, payload):
+def call_worker(model_path, input_path):
+    print(f"Input path from call_worker: {input_path}")
     proc = subprocess.run(
-        ["python3", "worker_test.py", model_path],
-        input=json.dumps(payload),
+        ["python3", "worker.py", model_path, input_path],
         text=True,
         capture_output=True,
         check=False,
-        timeout=120
+        timeout=100
     )
     if proc.returncode != 0:
         raise RuntimeError(f"Worker failed: {proc.stderr}")
@@ -54,12 +54,18 @@ def print_memory(label):
     print(f"[RAM] {label}: {mem_mb:.2f} MB")
 
 # Application endpoint
-@app.post("/token")
-def get_embedding(data: TokenInput):
+@app.post("/embed")
+def get_embedding(data: TextInput):
 
     print_memory("after calling enpoint, before loading input")
     input = data.input
     print_memory("after loading input")
+
+    print("Writing the input tokens to disk")
+    with open(input_path,"w") as f:
+        json.dump(input, f)
+    print("File size:", os.path.getsize(input_path))
+    print_memory("after writing input to disk")
 
     # Run the language sorting worker leveraging the fasttext language detection model
     # Returns a dictionnary having one key for each language FR & EN 
@@ -68,17 +74,27 @@ def get_embedding(data: TokenInput):
     # The second is a list for each job field containing the list of tokens of this job's field
     print("Calling worker for language identification")
     try:
-        group_input=call_worker(LOCAL_LANG_MODEL_PATH, input)
+        group_input=call_worker(LOCAL_LANG_MODEL_PATH, input_path)
     except RuntimeError as e:
         raise HTTPException(status_code=500, detail=f"worker failed on language identification: {e}")
     print("Retrieving worker output")
     print_memory("after getting grouped input from language identification worker")
 
+    print("Writing french inference model input to disk")
+    with open(fr_embeddings_path,"w") as f:
+        json.dump(group_input["FR"][1],f)
+
+    print("Writing english inference model input to disk")
+    with open(en_embeddings_path,"w") as f:
+        json.dump(group_input["EN"][1],f)
+
+    print_memory("after writing the grouped input to disk")
+
     # With the output grouped by language key we can run the inference in batches
     # The inference is applied running a subprocess on the second list
     print("Calling worker for french model inference")
     try:
-        FR_output = call_worker(LOCAL_FR_MODEL_PATH,group_input["FR"][1])["embeddings"]
+        FR_output = call_worker(LOCAL_FR_MODEL_PATH,fr_embeddings_path)["embeddings"]
     except RuntimeError as e:
         raise HTTPException(status_code=500, detail=f"worker failed on french model inference: {e}")
     print("French model inference retrieved")
@@ -86,7 +102,7 @@ def get_embedding(data: TokenInput):
 
     print("Calling worker for english model inference")
     try:
-        EN_output = call_worker(LOCAL_EN_MODEL_PATH,group_input["EN"][1])["embeddings"]
+        EN_output = call_worker(LOCAL_EN_MODEL_PATH,en_embeddings_path)["embeddings"]
     except RuntimeError as e:
         raise HTTPException(status_code=500, detail=f"worker failed on english model inference: {e}")
     print("English model inference retrieved")
