@@ -56,7 +56,7 @@ def print_memory(label):
     mem_mb = process.memory_info().rss / (1024*1024)
     print(f"[RAM] {label}: {mem_mb:.2f} MB")
 
-def core_get_embeddings(model_type: str, input)
+def core_get_embeddings(model_type: str, input):
     # model_type ∈ {"token", "sentence"}
 
     worker_path= f"{model_type}_worker.py"
