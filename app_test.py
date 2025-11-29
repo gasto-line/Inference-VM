@@ -32,7 +32,7 @@ print("Download completed")
 app = FastAPI()
 
 # Define input schema
-class TextInput(BaseModel):
+class TokenInput(BaseModel):
     input: List[List[str]]
 
 def call_worker(model_path, payload):
@@ -54,8 +54,8 @@ def print_memory(label):
     print(f"[RAM] {label}: {mem_mb:.2f} MB")
 
 # Application endpoint
-@app.post("/embed")
-def get_embedding(data: TextInput):
+@app.post("/token")
+def get_embedding(data: TokenInput):
 
     print_memory("after calling enpoint, before loading input")
     input = data.input
