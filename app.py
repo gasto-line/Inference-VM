@@ -96,8 +96,17 @@ def core_get_embeddings(model_type: str, input):
     print("English model inference retrieved")
     print_memory("after getting the english model output")
 
+    # sanity checks
+    if len(FR_output) != len(group_input["FR"][0]):
+        raise HTTPException(status_code=500, detail="Mismatch in number of french embeddings")
+    if len(EN_output) != len(group_input["EN"][0]):
+        raise HTTPException(status_code=500, detail="Mismatch in number of english embeddings")
+    
     # Create a output variable
-    group_output=group_input.copy()
+    group_output= {
+    "FR": [group_input["FR"][0], None],
+    "EN": [group_input["EN"][0], None]
+    }
     group_output["FR"][1]=FR_output
     group_output["EN"][1]=EN_output
     print_memory("after merging for final output")
