@@ -1,18 +1,14 @@
 # worker.py
 import sys, json, fasttext
-
 model_path = sys.argv[1]
 model = fasttext.load_model(model_path)
-
-payload_path = sys.argv[2]
-payload = json.load(open(payload_path))
+payload = json.load(sys.stdin)
 
 # payload contains list of texts / tokens ...
 if "lang" in model_path:
     result = {"FR": [[],[]], "EN": [[],[]]}
     for i,text in enumerate(payload):
-        full_text=" ".join(text)
-        lang = model.predict(full_text)[0][0]
+        lang = model.predict(text)[0][0]
         if lang == "__label__fra_Latn":
             result["FR"][0].append(i)
             result["FR"][1].append(text)
@@ -22,7 +18,7 @@ if "lang" in model_path:
 else:
     result = {"embeddings": []}
     for text in payload:
-        result["embeddings"].append([model.get_word_vector(token).tolist() for token in text])
+        result["embeddings"].append(model.get_sentence_vector(text))
 
 print(json.dumps(result))
 # process exits -> memory freed
