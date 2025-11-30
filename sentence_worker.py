@@ -18,7 +18,7 @@ if "lang" in model_path:
 else:
     result = {"embeddings": []}
     for text in payload:
-        result["embeddings"].append(model.get_sentence_vector(text))
+        result["embeddings"].append(model.get_sentence_vector(text).tolist())
 
 print(json.dumps(result))
 # process exits -> memory freed
