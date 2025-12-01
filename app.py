@@ -78,6 +78,10 @@ def core_get_embeddings(model_type: str, input):
     print("Retrieving worker output")
     print_memory("after getting grouped input from language identification worker")    
 
+    # Sanity checks
+    if len(group_input["FR"][0]) + len(group_input["EN"][0]) != len(input):
+        raise HTTPException(status_code=500, detail="Mismatch in number of input and grouped input items")
+
     # With the output grouped by language key we can run the inference in batches
     # The inference is applied running a subprocess on the second list
     print("Calling worker for french model inference")
@@ -101,6 +105,7 @@ def core_get_embeddings(model_type: str, input):
         raise HTTPException(status_code=500, detail="Mismatch in number of french embeddings")
     if len(EN_output) != len(group_input["EN"][0]):
         raise HTTPException(status_code=500, detail="Mismatch in number of english embeddings")
+
     
     # Create a output variable
     group_output= {
