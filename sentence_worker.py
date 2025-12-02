@@ -15,6 +15,9 @@ if "lang" in model_path:
         elif lang == "__label__eng_Latn":
             result["EN"][0].append(i)
             result["EN"][1].append(text)
+        else:
+            result["EN"][0].append(i)
+            result["EN"][1].append(text)
 else:
     result = {"embeddings": []}
     for text in payload:
