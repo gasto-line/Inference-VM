@@ -40,7 +40,7 @@ class SentenceInput(BaseModel):
 
 def call_worker(model_path, payload, worker):
     proc = subprocess.run(
-        ["python3", worker, model_path],
+        ["/home/ec2-user/Inference-VM/venv/bin/python3", worker, model_path],
         input=json.dumps(payload),
         text=True,
         capture_output=True,
@@ -106,7 +106,6 @@ def core_get_embeddings(model_type: str, input):
     if len(EN_output) != len(group_input["EN"][0]):
         raise HTTPException(status_code=500, detail="Mismatch in number of english embeddings")
 
-    
     # Create a output variable
     group_output= {
     "FR": [group_input["FR"][0], None],
