@@ -21,10 +21,10 @@ en_embeddings_path = "/home/ec2-user/en_embeddings.json"
 
 s3 = boto3.client("s3", region_name = REGION)
 
-def download_if_missing(bucket, key, local_path):
-    if os.path.exists(local_path) and os.path.getsize(local_path) > 0:
+def download_model(bucket, key, local_path):
+    '''if os.path.exists(local_path) and os.path.getsize(local_path) > 0:
         print(f"[OK] File already exists, skipping download → {local_path}")
-        return
+        return'''
     
     # Ensure parent directory exists
     os.makedirs(os.path.dirname(local_path), exist_ok=True)
@@ -36,9 +36,9 @@ def download_if_missing(bucket, key, local_path):
 # Download model from S3
 print("Checking model files...")
 # Choose the same directory as s3 to store on EBS volume
-download_if_missing(BUCKET, S3_FR_MODEL_KEY, LOCAL_FR_MODEL_PATH)
-download_if_missing(BUCKET, S3_EN_MODEL_KEY, LOCAL_EN_MODEL_PATH)
-download_if_missing(BUCKET, S3_LANG_MODEL_KEY, LOCAL_LANG_MODEL_PATH)
+download_model(BUCKET, S3_FR_MODEL_KEY, LOCAL_FR_MODEL_PATH)
+download_model(BUCKET, S3_EN_MODEL_KEY, LOCAL_EN_MODEL_PATH)
+download_model(BUCKET, S3_LANG_MODEL_KEY, LOCAL_LANG_MODEL_PATH)
 print("All model checks complete.")
 
 app = FastAPI()
